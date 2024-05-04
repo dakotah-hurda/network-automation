@@ -1,0 +1,43 @@
+name: Generate OpenSSH Config
+
+on:
+  push:
+    branches:
+      - 25-add-new-feature-openssh-config-generator
+    
+  workflow_dispatch:
+    inputs:
+      ssh_user:
+        description: 'Enter your SSH Username used for connecting to devices.'
+        required: true
+
+jobs:
+  run_script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.12.1
+
+      - name: Activate virtual environment and run script
+        run: |
+          cd ${{ github.workspace }}  # Navigate to the repository directory
+          python3 -m venv .
+          source bin/activate    # Activate the virtual environment
+          pip install -r requirements.txt
+          ls -la
+          python3 src/openssh_config.py -ssh_user "${{ inputs.ssh_user }}" -env prod
+          deactivate                 # Deactivate the virtual environment
+        env:
+          SSH_USER: ${{ inputs.ssh_user }}
+
+      - name: Archive OpenSSH Config Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: OpenSSH Configuration File
+          path: ./config

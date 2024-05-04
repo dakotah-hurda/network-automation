@@ -1,0 +1,11 @@
+KexAlgorithms +diffie-hellman-group1-sha1
+HostKeyAlgorithms +ssh-rsa
+PubkeyAcceptedKeyTypes +ssh-rsa
+MACs +hmac-sha1,hmac-sha1-96
+
+{% for device in devices %}
+Host {{device}}
+  HostName {{device}}.domain
+  User {{ssh_user}}
+  
+{% endfor %}
