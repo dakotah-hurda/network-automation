@@ -1,6 +1,6 @@
 # Standard Library
 import argparse
-from jinja2 import Environment, PackageLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader
 import os
 import sys
 
@@ -18,23 +18,20 @@ def main(ssh_user: str, api_token: str, url: str):
 
     Args:
         ssh_user (str): Username of the admin, typically .a account. Collected when running from CI/CD.
-        api_token (str): String representation of the service account's API token. Should probably be refactored to use Secrets.
+        api_token (str): String representation of the service account's API token.
         url (str): Full URL for the proper Netbox environment's API base endpoint.
     """
 
-    # try:
-    #     devices = collect_nb_devices(url=url, api_token=api_token)
-    #     ssh_conf = render_ssh_conf(devices=devices, ssh_user=ssh_user)
-    #     write_to_file(ssh_conf)
+    try:
+        devices = collect_nb_devices(url=url, api_token=api_token)
+        ssh_conf = render_ssh_conf(devices=devices, ssh_user=ssh_user)
+        write_to_file(ssh_conf)
 
-    # except err.DataError as e:
-    #     err_report.log_parser(e)
-    #     sys.exit(1)
-    # except Exception as e:
-    #     raise (e)
-
-    print(ssh_user, api_token, url)
-    write_to_file(ssh_conf="here's your test ssh configuration, bucko")
+    except err.DataError as e:
+        err_report.log_parser(e)
+        sys.exit(1)
+    except Exception as e:
+        raise (e)
 
 
 def collect_nb_devices(url: str, api_token: str) -> set:
@@ -60,13 +57,26 @@ def collect_nb_devices(url: str, api_token: str) -> set:
         # Fetch devices
         nb_devices = nb.dcim.devices.filter(status="active", role=NB_ROLE_SEARCHLIST)
 
-        devices = set()  # Using a set to ensure uniqueness
+        # Output set
+        devices = set()
 
         for nb_device in nb_devices:
-            if nb_device.virtual_chassis:
-                devices.add(nb_device.virtual_chassis.name)
-            else:
-                devices.add(nb_device.name)
+            try:
+                if nb_device.virtual_chassis:
+                    vc_master = nb_device.virtual_chassis.master.name
+                    dvc_lookup = nb.dcim.devices.get(name=vc_master)
+                    dns_name = dvc_lookup.primary_ip4.dns_name
+                    nb_device.dns_name = dns_name
+                else:
+                    nb_device.dns_name = nb_device.primary_ip4.dns_name
+
+                if nb_device.dns_name == "":
+                    nb_device.dns_name = "FIX_ME_IN_NETBOX"
+
+            except AttributeError as e:
+                nb_device.dns_name = "FIX_ME_IN_NETBOX"
+
+            devices.add(nb_device)
 
         return devices
 
@@ -80,6 +90,18 @@ def collect_nb_devices(url: str, api_token: str) -> set:
         error_message = "ERROR: Netbox Request error."
         raise err.DataError(message=error_message, extra_data={"original_exception": e})
 
+    except AttributeError as e:
+        error_message = (
+            f"ERROR: Could not find expected data in Netbox. Update Netbox data."
+        )
+
+        raise err.DataError(
+            message=error_message,
+            error_type="NetboxCompliancy",
+            device=nb_device,
+            extra_data={"original_exception": e},
+        )
+
     except Exception as e:
         # Catch any unexpected exceptions and raise them with proper context
         error_message = f"ERROR: An unexpected error occurred: {str(e)}"
@@ -88,9 +110,8 @@ def collect_nb_devices(url: str, api_token: str) -> set:
 
 def render_ssh_conf(devices: set, ssh_user: str):
     # Create a Jinja2 environment with the FileSystemLoader
-    env = Environment(
-        loader=PackageLoader(package_name="src"),
-    )
+    templateLoader = FileSystemLoader(searchpath="./src/templates/")
+    env = Environment(loader=templateLoader)
 
     # Load the template from the specified directory
     template = env.get_template("ssh_conf.j2")
@@ -102,17 +123,11 @@ def render_ssh_conf(devices: set, ssh_user: str):
 
 
 def write_to_file(ssh_conf):
-    with open("config", "w+") as f:
+    with open("artifacts/config", "w+") as f:
         f.write(ssh_conf)
 
 
 if __name__ == "__main__":
-    # Constants
-    ENVIRONMENTS = {
-        "prod": {"url": "https://prod-netbox-url.domain", "env_var": "prod_nb_token"},
-        "dev": {"url": "https://netbox-dev.domain", "env_var": "dev_nb_token"},
-    }
-
     load_dotenv()
 
     # Load and parse arguments
@@ -123,24 +138,18 @@ if __name__ == "__main__":
         required=True,
     )
     parser.add_argument(
-        "-env",
-        choices=ENVIRONMENTS.keys(),
-        help="Choose 'prod' or 'dev' environment",
+        "-url",
+        help="Netbox URL",
         required=True,
     )
 
     # # Parse args
     args = parser.parse_args()
     ssh_user = args.ssh_user
-    # running_env = args.env
+    url = args.url
 
     # # Get environment configuration
-    # env_config = ENVIRONMENTS[running_env]
-    # api_token = os.environ.get(env_config["env_var"])
-    # url = env_config["url"]
-
-    api_token = "test_token"
-    url="test_url"
+    api_token = os.environ.get("NB_API_TOKEN")
 
     # Pass collected data to main func
     main(ssh_user=ssh_user, api_token=api_token, url=url)

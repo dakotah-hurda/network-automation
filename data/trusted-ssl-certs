@@ -1,0 +1,3 @@
+# this is a file you should populate trusted SSL certs into. 
+# Workflows reference this file for automatically adding these certs to the 'Certifi' python library
+# when the Python container is built. 

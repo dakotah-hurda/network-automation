@@ -5,7 +5,7 @@ MACs +hmac-sha1,hmac-sha1-96
 
 {% for device in devices %}
 Host {{device}}
-  HostName {{device}}.domain
+  HostName {{device.dns_name}}
   User {{ssh_user}}
   
 {% endfor %}

@@ -11,6 +11,13 @@ def log_parser(DataError):
     
     # Maps error_types to correct reporter(s). Change value to 'list' for multiple reporters.
     error_types = {
+        
+        # Generic
+        '': 'api_reporter',
+
+        # Misc Errors
+        'NetboxCompliancy': 'api_reporter',
+
         # SNMP Issues
         'SNMPTimeout': 'api_reporter',
         'SNMPBadDigest': 'api_reporter',
