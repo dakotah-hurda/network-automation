@@ -1,43 +1,64 @@
-name: Generate OpenSSH Config
+name: Generate OpenSSH Configuration File
 
 on:
-  push:
-    branches:
-      - 25-add-new-feature-openssh-config-generator
-    
+
   workflow_dispatch:
     inputs:
       ssh_user:
-        description: 'Enter your SSH Username used for connecting to devices.'
+        description: 'SSH Username used for connecting to devices.'
         required: true
+      env_choice:
+        type: choice
+        description: Prod or Dev environment
+        required: true
+        options:
+          - prod
+          - dev
+      
 
 jobs:
   run_script:
-    runs-on: ubuntu-latest
-
+    runs-on: self-hosted
+    environment: ${{ inputs.env_choice }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.12.1
-
-      - name: Activate virtual environment and run script
+      
+      
+      - name: 'Cleanup build folder and clone clean repo'
         run: |
-          cd ${{ github.workspace }}  # Navigate to the repository directory
-          python3 -m venv .
-          source bin/activate    # Activate the virtual environment
-          pip install -r requirements.txt
-          ls -la
-          python3 src/openssh_config.py -ssh_user "${{ inputs.ssh_user }}" -env prod
-          deactivate                 # Deactivate the virtual environment
-        env:
-          SSH_USER: ${{ inputs.ssh_user }}
+          pwd
+          ls -la ./
+          rm -rf ./* || true
+          rm -rf ./.??* || true
+          ls -la ./
+      
+      # Notice that this 'uses' line is part of the 'Cleanup' step above.
+      - uses: actions/checkout@v4
+        with:
+          ref: 'main'
+    
+      - name: Build Python Environment in Docker Container
+        run: |
+          docker build -t python:network-automation .
 
-      - name: Archive OpenSSH Config Artifact
-        uses: actions/upload-artifact@v2
+      - name: Execute Script
+        run: |
+          cd ${{ github.workspace }}
+          docker run --rm --name network-automation \
+          -e NB_API_TOKEN="$NB_API_TOKEN" \
+          -v "$PWD":${{ github.workspace }} \
+          -w ${{ github.workspace }} \
+          --user $(id -u):$(id -g) \
+          python:network-automation \
+          python -u ${{ github.workspace }}/src/openssh_config.py \
+          -url ${{ vars.NB_URL }} \
+          -ssh_user ${{ inputs.ssh_user }}
+        env:
+          NB_API_TOKEN: ${{ secrets.NB_API_TOKEN }}
+      
+      - name: Archive Artifact - Config File
+        uses: actions/upload-artifact@v4
         with:
           name: OpenSSH Configuration File
-          path: ./config
+          path: |
+            ${{ github.workspace }}/artifacts/config
+            ${{ github.workspace }}/artifacts/openssh_conf_instructions.txt

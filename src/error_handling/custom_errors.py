@@ -7,7 +7,7 @@ class DataError(Exception):
     def __init__(self, message, 
             error_type: str = "", 
             device: pynetbox.models.dcim.Devices = {}, 
-            extra_data: dict={}
+            extra_data: dict = {}
             ):
         """Used to package base_compliancy module errors for error_reporting module
 

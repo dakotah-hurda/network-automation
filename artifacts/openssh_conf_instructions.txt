@@ -1,0 +1,5 @@
+The config file included with this .ZIP file can be moved into your OpenSSH configuration directory. 
+
+By default, this is typically 'C:\Users\yourUsername\.ssh\config'
+
+After installing the file, you can use any OpenSSH functions with pre-loaded configuration.
